@@ -10,13 +10,10 @@ app = FastAPI(
     version="0.1.0",
 )
 
-cors_origins_str = os.environ.get("CORS_ORIGINS", "http://localhost:3000")
-cors_origins = [o.strip() for o in cors_origins_str.split(",") if o.strip()]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=["https://productselection.vercel.app", "http://localhost:3000"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -32,4 +29,4 @@ def root():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "cors_origins": cors_origins}
+    return {"status": "ok"}

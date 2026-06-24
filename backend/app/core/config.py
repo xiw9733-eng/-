@@ -1,20 +1,17 @@
 """全局配置：环境变量 + 四要素打分的默认权重/阈值。"""
-from pydantic_settings import BaseSettings
+import os
 from typing import List
 
 
-class Settings(BaseSettings):
-    openai_api_key: str = ""
-    dashscope_api_key: str = ""
-    cors_origins: str = "http://localhost:3000"
-    max_upload_mb: int = 20
+class Settings:
+    openai_api_key: str = os.environ.get("OPENAI_API_KEY", "")
+    dashscope_api_key: str = os.environ.get("DASHSCOPE_API_KEY", "")
+    cors_origins: str = os.environ.get("CORS_ORIGINS", "http://localhost:3000")
+    max_upload_mb: int = int(os.environ.get("MAX_UPLOAD_MB", "20"))
 
     @property
     def cors_origin_list(self) -> List[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
-
-    class Config:
-        env_file = ".env"
 
 
 settings = Settings()

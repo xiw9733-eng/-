@@ -17,7 +17,7 @@ from PIL import Image
 
 # ── 配置 ──────────────────────────────────────────
 DASHSCOPE_API_KEY = os.environ.get("DASHSCOPE_API_KEY", "sk-ws-H.REMXIRP.iFwr.MEUCIEOMYoNXBEL676J_ykP8n1z7auOiNSmHWql4uz1HLukmAiEAxs3mNqql5mE689jzMLyvnp96hHhxWLoVUEDJo33buy0")
-MODEL_NAME = os.environ.get("VISION_MODEL", "qwen-vl-plus")
+MODEL_NAME = os.environ.get("VISION_MODEL", "qwen3-vl-32b-thinking")
 MAX_IMAGE_SIDE = 256      # 压缩后最大边长，省token
 MAX_TOKENS_PER_IMG = 80   # 每张图最大输出token
 MAX_WORKERS = 5           # 并发数

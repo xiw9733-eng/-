@@ -30,3 +30,12 @@ def root():
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/debug-env")
+def debug_env():
+    return {
+        "gemini_key_set": bool(os.environ.get("GEMINI_API_KEY")),
+        "gemini_key_prefix": os.environ.get("GEMINI_API_KEY", "")[:8] or "NOT SET",
+        "cors_origins": os.environ.get("CORS_ORIGINS", "NOT SET"),
+    }

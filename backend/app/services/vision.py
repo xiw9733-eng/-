@@ -15,7 +15,7 @@ from PIL import Image
 
 # ── 配置 ──────────────────────────────────────────
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-MODEL_NAME = "gemini-2.0-flash-lite"
+MODEL_NAME = "gemini-3.5-flash"
 MAX_IMAGE_SIDE = 512
 MAX_WORKERS = 5
 

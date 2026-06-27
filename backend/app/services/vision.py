@@ -77,13 +77,18 @@ async def _get_keywords_single(asin: str, b64: str, mime: str) -> Tuple[str, Lis
             resp.raise_for_status()
             data = resp.json()
             raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            import logging
+            logging.warning(f"[vision] {asin} raw={repr(raw[:200])}")
             kws = [
                 k.strip().strip("。，,.、")
                 for k in re.split(r"[，,、\n]", raw)
                 if k.strip() and k.strip() not in STOPWORDS and len(k.strip()) >= 2
             ]
+            logging.warning(f"[vision] {asin} kws={kws}")
             return asin, kws
     except Exception as e:
+        import logging
+        logging.warning(f"[vision] {asin} error={e}")
         return asin, []
 
 

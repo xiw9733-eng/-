@@ -13,12 +13,14 @@ import {
 } from "@/lib/types";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { BarChart2 } from "lucide-react";
+import { AiInsight } from "@/components/dashboard/AiInsight";
 
 export default function HomePage() {
   const [result, setResult] = useState<AnalysisResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [weights, setWeights] = useState<Weights>(DEFAULT_WEIGHTS);
+  const [aiReasons, setAiReasons] = useState<Record<string, string>>({});
 
   async function handleAnalyze(files: CountryFile[]) {
     setLoading(true);
@@ -26,6 +28,7 @@ export default function HomePage() {
     try {
       const data = await analyzeFiles(files, weights, DEFAULT_THRESHOLDS);
       setResult(data);
+      setAiReasons({});
     } catch (e) {
       if (e instanceof ApiError) {
         const detail = e.detail;
@@ -90,6 +93,12 @@ export default function HomePage() {
           <section className="flex flex-col gap-6">
             <ParseWarnings warnings={result.summary.parse_warnings} />
 
+            <AiInsight
+              products={recomputedProducts}
+              summary={recomputedSummary}
+              onReasonsReady={setAiReasons}
+            />
+
             <Tabs defaultValue="charts">
               <TabsList>
                 <TabsTrigger value="charts">可视化概览</TabsTrigger>
@@ -107,7 +116,7 @@ export default function HomePage() {
                 />
               </TabsContent>
               <TabsContent value="table" className="pt-2">
-                <ProductTable products={recomputedProducts} />
+                <ProductTable products={recomputedProducts} reasons={aiReasons} />
               </TabsContent>
             </Tabs>
           </section>

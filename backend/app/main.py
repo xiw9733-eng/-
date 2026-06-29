@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import analyze, wordcloud
+from app.routers import analyze, wordcloud, insight
 
 app = FastAPI(
     title="跨境选品四要素分析 API",
@@ -20,6 +20,7 @@ app.add_middleware(
 
 app.include_router(analyze.router)
 app.include_router(wordcloud.router)
+app.include_router(insight.router)
 
 
 @app.get("/")

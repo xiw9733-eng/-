@@ -29,9 +29,10 @@ type SortKey = "total_score" | "monthly_revenue" | "growth_rate" | "hhi";
 
 interface ProductTableProps {
   products: ScoredProduct[];
+  reasons?: Record<string, string>;
 }
 
-export function ProductTable({ products }: ProductTableProps) {
+export function ProductTable({ products, reasons = {} }: ProductTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("total_score");
   const [asc, setAsc] = useState(false);
 
@@ -69,6 +70,7 @@ export function ProductTable({ products }: ProductTableProps) {
             <TableHead>利润率</TableHead>
             <TableHead>总分 <SortBtn col="total_score" /></TableHead>
             <TableHead>推荐</TableHead>
+            <TableHead>AI理由</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -100,6 +102,9 @@ export function ProductTable({ products }: ProductTableProps) {
                 <Badge variant={getRecBadgeVariant(p.recommendation)}>
                   {p.recommendation ?? "—"}
                 </Badge>
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground max-w-[180px]">
+                {reasons[p.asin] ?? <span className="opacity-30">—</span>}
               </TableCell>
             </TableRow>
           ))}

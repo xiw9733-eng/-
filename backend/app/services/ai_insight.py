@@ -1,0 +1,92 @@
+"""
+模块6：AI机会总结 + 产品推荐理由。
+一次API调用同时生成：
+- summary: 整体市场总结（150字以内）
+- reasons: Top20产品各自的推荐/不推荐理由（每条30字以内）
+"""
+import os
+import json
+import httpx
+from typing import List, Dict
+
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+MODEL = "claude-sonnet-4-6"
+
+
+def _build_prompt(products: List[dict], summary_stats: dict) -> str:
+    # 只取关键字段，省token
+    slim = [
+        {
+            "asin": p["asin"],
+            "country": p["country"],
+            "category": p.get("category", ""),
+            "growth": f"{(p.get('growth_rate') or 0)*100:.0f}%",
+            "revenue": f"{(p.get('monthly_revenue') or 0)/1000:.0f}K",
+            "hhi": round(p.get("hhi") or 0, 2),
+            "margin": f"{(p.get('profit_margin') or 0)*100:.0f}%",
+            "score": round(p.get("total_score") or 0, 3),
+            "rec": p.get("recommendation", ""),
+        }
+        for p in products[:20]
+    ]
+
+    stats_lines = []
+    for c in summary_stats.get("countries", []):
+        stats_lines.append(
+            f"{c['country']}: 月销售额{c['total_monthly_revenue']/1000:.0f}K"
+            + (f" 平均增速{c['avg_growth_rate']*100:.0f}%" if c.get("avg_growth_rate") else "")
+        )
+
+    rec_breakdown = summary_stats.get("recommendation_breakdown", {})
+
+    return f"""你是跨境电商选品分析师。根据以下数据生成分析，语言简洁，直接给结论。
+
+【市场概况】
+{chr(10).join(stats_lines)}
+推荐分布：{json.dumps(rec_breakdown, ensure_ascii=False)}
+
+【Top20产品数据】
+{json.dumps(slim, ensure_ascii=False)}
+
+请严格按以下JSON格式返回，不要任何其他内容：
+{{
+  "summary": "整体市场总结，150字以内，说明哪个国家/品类机会最大、主要风险，给出1-2个明确建议",
+  "reasons": {{
+    "ASIN1": "30字以内推荐/回避理由",
+    "ASIN2": "30字以内推荐/回避理由"
+  }}
+}}"""
+
+
+async def generate_insight(products: List[dict], summary_stats: dict) -> Dict:
+    if not ANTHROPIC_API_KEY:
+        raise ValueError("请设置环境变量 ANTHROPIC_API_KEY")
+
+    prompt = _build_prompt(products, summary_stats)
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": MODEL,
+                "max_tokens": 1000,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        raw = data["content"][0]["text"].strip()
+
+        # 提取JSON
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        parsed = json.loads(raw[start:end])
+        return {
+            "summary": parsed.get("summary", ""),
+            "reasons": parsed.get("reasons", {}),
+        }

@@ -9,8 +9,8 @@ import json
 import httpx
 from typing import List, Dict
 
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-MODEL = "gpt-4o-mini"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+MODEL = "gemini-2.5-flash"
 
 
 def _build_prompt(products: List[dict], summary_stats: dict) -> str:
@@ -59,27 +59,22 @@ def _build_prompt(products: List[dict], summary_stats: dict) -> str:
 
 
 async def generate_insight(products: List[dict], summary_stats: dict) -> Dict:
-    if not OPENAI_API_KEY:
-        raise ValueError("请设置环境变量 OPENAI_API_KEY")
+    if not GEMINI_API_KEY:
+        raise ValueError("请设置环境变量 GEMINI_API_KEY")
 
     prompt = _build_prompt(products, summary_stats)
 
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_API_KEY}"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"maxOutputTokens": 1000},
+    }
+
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": MODEL,
-                "max_tokens": 1000,
-                "messages": [{"role": "user", "content": prompt}],
-            },
-        )
+        resp = await client.post(url, json=payload)
         resp.raise_for_status()
         data = resp.json()
-        raw = data["choices"][0]["message"]["content"].strip()
+        raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
         # 提取JSON
         start = raw.find("{")

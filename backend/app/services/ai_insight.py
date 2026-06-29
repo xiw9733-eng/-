@@ -9,8 +9,8 @@ import json
 import httpx
 from typing import List, Dict
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-MODEL = "claude-sonnet-4-6"
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+MODEL = "gpt-4o-mini"
 
 
 def _build_prompt(products: List[dict], summary_stats: dict) -> str:
@@ -59,18 +59,17 @@ def _build_prompt(products: List[dict], summary_stats: dict) -> str:
 
 
 async def generate_insight(products: List[dict], summary_stats: dict) -> Dict:
-    if not ANTHROPIC_API_KEY:
-        raise ValueError("请设置环境变量 ANTHROPIC_API_KEY")
+    if not OPENAI_API_KEY:
+        raise ValueError("请设置环境变量 OPENAI_API_KEY")
 
     prompt = _build_prompt(products, summary_stats)
 
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
-            "https://api.anthropic.com/v1/messages",
+            "https://api.openai.com/v1/chat/completions",
             headers={
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json",
             },
             json={
                 "model": MODEL,
@@ -80,7 +79,7 @@ async def generate_insight(products: List[dict], summary_stats: dict) -> Dict:
         )
         resp.raise_for_status()
         data = resp.json()
-        raw = data["content"][0]["text"].strip()
+        raw = data["choices"][0]["message"]["content"].strip()
 
         # 提取JSON
         start = raw.find("{")

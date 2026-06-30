@@ -13,6 +13,11 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 MODEL = "gemini-2.5-flash"
 
 
+def _shorten(text: str, limit: int = 300) -> str:
+    text = " ".join(text.split())
+    return text[:limit] + ("..." if len(text) > limit else "")
+
+
 def _build_prompt(products: List[dict], summary_stats: dict) -> str:
     # 只取关键字段，省token
     slim = [
@@ -67,20 +72,57 @@ async def generate_insight(products: List[dict], summary_stats: dict) -> Dict:
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"maxOutputTokens": 1000},
+        "generationConfig": {
+            "maxOutputTokens": 1000,
+            "temperature": 0.2,
+            "responseMimeType": "application/json",
+        },
     }
 
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(url, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-        raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        try:
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise ValueError(
+                f"Gemini接口请求失败({resp.status_code})：{_shorten(resp.text)}"
+            ) from exc
 
-        # 提取JSON
-        start = raw.find("{")
-        end = raw.rfind("}") + 1
+        try:
+            data = resp.json()
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Gemini返回内容不是JSON：{_shorten(resp.text)}") from exc
+
+    candidates = data.get("candidates") or []
+    if not candidates:
+        raise ValueError(f"Gemini没有返回候选结果：{_shorten(json.dumps(data, ensure_ascii=False))}")
+
+    candidate = candidates[0]
+    parts = candidate.get("content", {}).get("parts") or []
+    raw = "".join(part.get("text", "") for part in parts).strip()
+    if not raw:
+        finish_reason = candidate.get("finishReason", "UNKNOWN")
+        raise ValueError(f"Gemini返回为空，结束原因：{finish_reason}")
+
+    # Gemini偶尔仍会包一层```json代码块，这里做一次兼容提取。
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start < 0 or end <= start:
+        raise ValueError(f"Gemini未返回有效JSON：{_shorten(raw)}")
+
+    try:
         parsed = json.loads(raw[start:end])
-        return {
-            "summary": parsed.get("summary", ""),
-            "reasons": parsed.get("reasons", {}),
-        }
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Gemini返回JSON解析失败：{_shorten(raw)}") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("Gemini返回格式错误：顶层不是JSON对象")
+
+    reasons = parsed.get("reasons", {})
+    if not isinstance(reasons, dict):
+        reasons = {}
+
+    return {
+        "summary": str(parsed.get("summary", "")),
+        "reasons": {str(k): str(v) for k, v in reasons.items()},
+    }

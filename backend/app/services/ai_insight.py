@@ -71,7 +71,7 @@ async def _call_gemini(client: httpx.AsyncClient, model: str, prompt: str) -> di
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
-            "maxOutputTokens": 1000,
+            "maxOutputTokens": 4096,
             "temperature": 0.2,
             "responseMimeType": "application/json",
         },
@@ -127,19 +127,23 @@ async def generate_insight(products: List[dict], summary_stats: dict) -> Dict:
     candidate = candidates[0]
     parts = candidate.get("content", {}).get("parts") or []
     raw = "".join(part.get("text", "") for part in parts).strip()
+    finish_reason = candidate.get("finishReason", "UNKNOWN")
     if not raw:
-        finish_reason = candidate.get("finishReason", "UNKNOWN")
         raise ValueError(f"Gemini返回为空，结束原因：{finish_reason}")
 
     # Gemini偶尔仍会包一层```json代码块，这里做一次兼容提取。
     start = raw.find("{")
     end = raw.rfind("}") + 1
     if start < 0 or end <= start:
+        if finish_reason == "MAX_TOKENS":
+            raise ValueError(f"Gemini输出被截断，请减少产品数量或继续提高maxOutputTokens：{_shorten(raw)}")
         raise ValueError(f"Gemini未返回有效JSON：{_shorten(raw)}")
 
     try:
         parsed = json.loads(raw[start:end])
     except json.JSONDecodeError as exc:
+        if finish_reason == "MAX_TOKENS":
+            raise ValueError(f"Gemini输出被截断，请减少产品数量或继续提高maxOutputTokens：{_shorten(raw)}") from exc
         raise ValueError(f"Gemini返回JSON解析失败：{_shorten(raw)}") from exc
 
     if not isinstance(parsed, dict):

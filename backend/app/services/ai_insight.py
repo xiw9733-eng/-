@@ -6,11 +6,14 @@
 """
 import os
 import json
+import asyncio
 import httpx
 from typing import List, Dict
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-MODEL = "gemini-2.5-flash"
+PRIMARY_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash")
+FALLBACK_MODEL = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-2.5-flash")
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 def _shorten(text: str, limit: int = 300) -> str:
@@ -63,13 +66,8 @@ def _build_prompt(products: List[dict], summary_stats: dict) -> str:
 }}"""
 
 
-async def generate_insight(products: List[dict], summary_stats: dict) -> Dict:
-    if not GEMINI_API_KEY:
-        raise ValueError("请设置环境变量 GEMINI_API_KEY")
-
-    prompt = _build_prompt(products, summary_stats)
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent?key={GEMINI_API_KEY}"
+async def _call_gemini(client: httpx.AsyncClient, model: str, prompt: str) -> dict:
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_API_KEY}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
@@ -79,19 +77,48 @@ async def generate_insight(products: List[dict], summary_stats: dict) -> Dict:
         },
     }
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(url, json=payload)
-        try:
-            resp.raise_for_status()
-        except httpx.HTTPStatusError as exc:
-            raise ValueError(
-                f"Gemini接口请求失败({resp.status_code})：{_shorten(resp.text)}"
-            ) from exc
+    resp = await client.post(url, json=payload)
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise ValueError(
+            f"Gemini模型{model}请求失败({resp.status_code})：{_shorten(resp.text)}"
+        ) from exc
 
-        try:
-            data = resp.json()
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Gemini返回内容不是JSON：{_shorten(resp.text)}") from exc
+    try:
+        return resp.json()
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Gemini模型{model}返回内容不是JSON：{_shorten(resp.text)}") from exc
+
+
+async def _call_gemini_with_retry(prompt: str) -> dict:
+    models = [PRIMARY_MODEL]
+    if FALLBACK_MODEL and FALLBACK_MODEL not in models:
+        models.append(FALLBACK_MODEL)
+
+    last_error: Exception | None = None
+    async with httpx.AsyncClient(timeout=60) as client:
+        for model in models:
+            for attempt in range(3):
+                try:
+                    return await _call_gemini(client, model, prompt)
+                except ValueError as exc:
+                    last_error = exc
+                    message = str(exc)
+                    retryable = any(f"({code})" in message for code in RETRYABLE_STATUS_CODES)
+                    if not retryable or attempt == 2:
+                        break
+                    await asyncio.sleep(1.5 * (attempt + 1))
+
+    raise ValueError(f"AI分析暂时不可用，已重试多个模型：{last_error}") from last_error
+
+
+async def generate_insight(products: List[dict], summary_stats: dict) -> Dict:
+    if not GEMINI_API_KEY:
+        raise ValueError("请设置环境变量 GEMINI_API_KEY")
+
+    prompt = _build_prompt(products, summary_stats)
+    data = await _call_gemini_with_retry(prompt)
 
     candidates = data.get("candidates") or []
     if not candidates:
